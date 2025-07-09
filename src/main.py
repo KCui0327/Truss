@@ -3,6 +3,14 @@ from components import GPIOController
 import RPi.GPIO as GPIO
 from time import sleep
 
+def test_callback(channel, controller):
+    state = controller.read(27, skip_setup=1)
+    if(state == GPIO.HIGH):
+        print("Button released")
+    else:
+        print("Button pressed")
+    #print(f"pin {channel}: State is {state}")
+
 def main() -> None:
     """
     Main function run the application.
@@ -15,9 +23,19 @@ def main() -> None:
     
     try:
         # Complete GPIO operations in this block
-        gpio_controller.write(27, GPIO.HIGH)
-        sleep(1)
-        gpio_controller.write(27, GPIO.LOW)
+        #gpio_controller.write(27, GPIO.HIGH)
+        #sleep(1)
+        #gpio_controller.write(27, GPIO.LOW)
+        
+        gpio_controller.add_event_handler(
+            27, 
+            GPIO.BOTH, 
+            #callback=lambda channel: test_callback(channel, gpio_controller),
+            pull_mode=GPIO.PUD_UP
+        )
+
+        while True:
+            sleep(1)
     finally:
         gpio_controller.cleanup()
     logger.info("Application finished.")
