@@ -33,6 +33,8 @@ fi
 # fi
 
 echo "Environment setup complete. You can now run the Truss project."
-echo "To activate the virtual environment, run: source venv/bin/activate"
+echo "To activate the virtual environment, run: source venv/bin/activate (This is already done)"
 echo "To deactivate the virtual environment, run: deactivate"
 echo "To install required python dependencies, run: pip install -r requirements.txt"
+
+source venv/bin/activate
