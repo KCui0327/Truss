@@ -76,4 +76,4 @@ def webhook_stolon():
     send({'message': 'Welcome! You are now connected to the Truss Web Server.'})
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=54321, debug=True)
+    socketio.run(app, host='0.0.0.0', port=12345, debug=True)
