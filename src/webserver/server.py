@@ -25,6 +25,9 @@ def temperature():
         data = request.json
 
         if data and type(data) is dict and 'temperature' in data:
+            if not (-50 <= data['temperature'] <= 100):
+                return jsonify({"error": "Invalid temperature value. It must be between -50 and 100."}), 400
+            
             sensor_data['temperature'] = data['temperature']
             socketio.emit('temperature sensor data update', {'temperature': sensor_data['temperature']})
             return jsonify({"message": f"Received temperature data: {sensor_data['temperature']}"}), 200
@@ -39,6 +42,9 @@ def humidity():
         data = request.json
 
         if data and type(data) is dict and 'humidity' in data:
+            if not (0 <= data['humidity'] <= 100):
+                return jsonify({"error": "Invalid humidity value. It must be between 0 and 100."}), 400
+
             sensor_data['humidity'] = data['humidity']
             socketio.emit('humidity sensor data update', {'humidity': sensor_data['humidity']})
             return jsonify({"message": f"Received humidity data: {sensor_data['humidity']}"}), 200
@@ -53,6 +59,9 @@ def pH():
         data = request.json
 
         if data and type(data) is dict and 'pH' in data:
+            if not (0 <= data['pH'] <= 14):
+                return jsonify({"error": "Invalid pH value. It must be between 0 and 14."}), 400
+            
             sensor_data['pH'] = data['pH']
             socketio.emit('pH sensor data update', {'pH': sensor_data['pH']})
             return jsonify({"message": f"Received pH data: {sensor_data['pH']}"}), 200
