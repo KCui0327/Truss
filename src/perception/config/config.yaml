@@ -1,0 +1,8 @@
+image_width: 640
+image_height: 480
+
+chessboard_x_size: 9
+chessboard_y_size: 6
+# Please refer to OpenCV documentation for criteria values
+# https://opencv24-python-tutorials.readthedocs.io/en/latest/py_tutorials/py_ml/py_kmeans/py_kmeans_opencv/py_kmeans_opencv.html
+criteria: [3, 30, 0.001] # (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
