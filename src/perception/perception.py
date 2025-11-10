@@ -10,7 +10,6 @@ from ultralytics import YOLO
 from transformers import pipeline
 
 DETECTION_MODEL_PATH = "models/object_detection/weights.pt"
-DEPTH_MODEL_PATH     = "models/depth_estimation/depth_anything_v2_vitb.pth"
 ESP32_CAMERA_URL     = ""
 
 """
