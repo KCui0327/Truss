@@ -67,21 +67,31 @@ class Perception:
         return results
     
     # Inference the Depth Anything V2 model on an image
-    def get_depth_estimation(self, img):
-        depth = self.depth_model.infer_image(img)
-        return depth
+    def get_depth_estimation(self, img: np.ndarray, strawberry_detections: list) -> list:
+        depth_map = self.depth_model.infer_image(img)
+
+        ret = []
+
+        for r in strawberry_detections:
+            for box in r.boxes:
+                xyxy = box.xyxy[0].cpu().numpy().astype(int)
+                x1, y1, x2, y2 = xyxy
+                center_x, center_y = (x1 + x2) // 2, (y1 + y2) // 2
+                depth_value = depth_map[center_y, center_x]
+                ret.append({
+                    "xyxy": xyxy,
+                    "depth": depth_value
+                })
+
+        return ret
 
 if __name__ == "__main__":
     perception = Perception()
     img = perception.fetch_image(ESP32_CAMERA_URL)
-    plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-    plt.show()
 
     if img is not None:
         detection_results = perception.detect_strawberry(img)
-        depth_map = perception.get_depth_estimation(img)
-        plt.imshow(depth_map, cmap='plasma')
-        plt.colorbar()
-        plt.show()
+        results = perception.get_depth_estimation(img, detection_results)
+        for res in results:
+            print(f"Detection at {res['xyxy']} has depth: {res['depth']}")
         print("Depth estimation completed.")
-    
