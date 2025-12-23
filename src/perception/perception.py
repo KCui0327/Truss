@@ -143,7 +143,7 @@ if __name__ == "__main__":
     img = perception.fetch_image(ESP32_CAMERA_URL)
 
     if img is not None:
-        detection_results = perception.detect_strawberry(np.array(img))
+        detection_results = perception.detect_strawberry(img)
         results = perception.get_depth_estimation(img, detection_results)
         print("Depth estimation completed.")
 
