@@ -103,6 +103,8 @@ class Perception:
 
         return ret
 
+    # Determines new target strawberries' coordinate based on new frame
+    # algorithm: min. 3D Euclidean Distance
     def nearest_neighbour(self, strawberries: list) -> list:
         if TARGET_STRAWBERRY is None:
             raise ValueError("No target strawberry was chosen.")
@@ -122,6 +124,7 @@ class Perception:
         
         return ret
 
+    # Plots strawberry plant and ripe strawberries
     def plot_strawberry_plant(self, img: str, detections: list) -> None:
         _, ax = plt.subplots()
         ax.imshow(img)
