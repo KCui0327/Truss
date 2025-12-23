@@ -6,3 +6,7 @@ output.log
 
 # Python cache
 __pycache__/
+
+.DS_store
+
+.python-version
