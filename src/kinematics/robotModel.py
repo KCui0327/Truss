@@ -16,6 +16,6 @@ class RobotModel:
         joint_limits,
     ):
         self.n = len(a)
-        self.dh_table = np.column_stack((a, alpha, d, theta))
+        self.dh_table = np.column_stack((a, alpha, d, theta)).astype(float, copy=True)
         self.joint_limits = np.asarray(joint_limits)
 
