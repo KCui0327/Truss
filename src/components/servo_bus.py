@@ -92,7 +92,6 @@ def move_with_retry_backoff(
 ) -> bool:
     """
     1st move attempt + up to 3 retries with backoff.
-    Mirrors your project write-up:
       - retry1: wait 500ms
       - retry2: wait 1s
       - retry3: give up (caller returns home)
