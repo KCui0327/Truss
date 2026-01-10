@@ -2,7 +2,6 @@
 #include <WiFi.h>
 #include <WebServer.h>
 
-
 // NOTE: This code need to be compiled in Arduino IDE with the proper header files, open the CameraWebServer example folder and paste it in CameraWebServer.ino
 
 const char* ssid = "erichome";
