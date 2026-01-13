@@ -1,3 +1,10 @@
+"""
+Credits to Hiwonder for the original code.
+
+We have modified the code to suit USB connections and adapted it for our specific hardware setup.
+This code is intended for controlling servos via a USB interface.
+"""
+
 #!/usr/bin/env python3
 # encoding: utf-8
 import time
