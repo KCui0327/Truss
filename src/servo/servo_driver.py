@@ -3,8 +3,6 @@
 import time
 import ctypes
 import serial
-import RPi.GPIO as GPIO
-#幻尔科技总线舵机通信(Hiwonder bus servo information)#
 
 LOBOT_SERVO_FRAME_HEADER         = 0x55
 LOBOT_SERVO_MOVE_TIME_WRITE      = 1
@@ -36,38 +34,7 @@ LOBOT_SERVO_LED_CTRL_READ        = 34
 LOBOT_SERVO_LED_ERROR_WRITE      = 35
 LOBOT_SERVO_LED_ERROR_READ       = 36
 
-#serialHandle = serial.Serial("/dev/ttyS0", 115200)  # 初始化串口， 波特率为115200(initialize the baud rate of the serial port to 115200)
 serialHandle = serial.Serial("/dev/ttyUSB0", 115200)  # 初始化串口， 波特率为115200(initialize the baud rate of the serial port to 115200)
-
-rx_pin = 7
-tx_pin = 13
-
-GPIO.setwarnings(False)
-GPIO.setmode(GPIO.BOARD)
-
-def portInit():  # 配置用到的IO口(configure IO port to be used)
-    GPIO.setup(rx_pin, GPIO.OUT)  # 配置RX_CON 即 GPIO17 为输出(Configure RX_CON (GPIO17) as output)
-    GPIO.output(rx_pin, 0)
-    GPIO.setup(tx_pin, GPIO.OUT)  # 配置TX_CON 即 GPIO27 为输出(Configure TX_CON (GPI027) as output)
-    GPIO.output(tx_pin, 1)
-
-portInit()
-
-def portWrite():  # 配置单线串口为输出(configure single wire serial port as output)
-    GPIO.output(tx_pin, 1)  # 拉高TX_CON 即 GPIO27(pull up TX_CON (GPIO27))
-    GPIO.output(rx_pin, 0)  # 拉低RX_CON 即 GPIO17(pull down RX_CON (GPIO17))
-
-def portRead():  # 配置单线串口为输入(configure single wire serial port as input)
-    GPIO.output(rx_pin, 1)  # 拉高RX_CON 即 GPIO17(pull up RX_CON (GPIO17))
-    GPIO.output(tx_pin, 0)  # 拉低TX_CON 即 GPIO27(pull down TX_CON (GPIO27))
-
-def portRest():
-    time.sleep(0.1)
-    serialHandle.close()
-    GPIO.output(rx_pin, 1)
-    GPIO.output(tx_pin, 1)
-    serialHandle.open()
-    time.sleep(0.1)
 
 def checksum(buf):
     # 计算校验和(calculate checksum)
@@ -87,7 +54,7 @@ def serial_serro_wirte_cmd(id=None, w_cmd=None, dat1=None, dat2=None):
     :param dat2:
     :return:
     '''
-    #portWrite()
+
     buf = bytearray(b'\x55\x55')  # 帧头(frame header)
     buf.append(id)
     # 指令长度(command length)
@@ -121,7 +88,6 @@ def serial_servo_read_cmd(id=None, r_cmd=None):
     :param dat:
     :return:
     '''
-    #portWrite()
     buf = bytearray(b'\x55\x55')  # 帧头(frame header)
     buf.append(id)
     buf.append(3)  # 指令长度(command length)
@@ -137,7 +103,6 @@ def serial_servo_get_rmsg(cmd):
     :return: 数据
     '''
     serialHandle.flushInput()  # 清空接收缓存(clear received chach)
-    #portRead()  # 将单线串口配置为输入(configure the single wire serial port as input)
     time.sleep(0.005)  # 稍作延时，等待接收完毕(Delay for a while and wait the reception to complete)
     count = serialHandle.inWaiting()    # 获取接收缓存中的字节数(get the number of bytes in the received buffer)
     if count != 0:  # 如果接收到的数据不空(if the received data is not empty)
