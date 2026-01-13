@@ -32,7 +32,7 @@ class MatlabBackend:
     # Run inverse_kinematics.m in MATLAB using RobotModel DH parameters
     def inverseKinematics(self, robotModel, H):
         a, alpha, d, theta_offset = robotModel.dh_table.T
-        H_mat = matlab.double(H.tolist())
+        H_mat = matlab.double(H)
         q_mat = self.eng.inverseKinematics(
             H_mat,
             self.matlab_col(a),
