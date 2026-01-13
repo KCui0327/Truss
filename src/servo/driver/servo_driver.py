@@ -41,7 +41,7 @@ LOBOT_SERVO_LED_CTRL_READ        = 34
 LOBOT_SERVO_LED_ERROR_WRITE      = 35
 LOBOT_SERVO_LED_ERROR_READ       = 36
 
-serialHandle = serial.Serial("/dev/ttyUSB0", 115200)  # 初始化串口， 波特率为115200(initialize the baud rate of the serial port to 115200)
+# serialHandle = serial.Serial("/dev/ttyUSB0", 115200)  # 初始化串口， 波特率为115200(initialize the baud rate of the serial port to 115200)
 
 def checksum(buf):
     # 计算校验和(calculate checksum)
@@ -52,7 +52,7 @@ def checksum(buf):
     sum = ~sum  # 取反(bitwise)
     return sum & 0xff
 
-def serial_serro_wirte_cmd(id=None, w_cmd=None, dat1=None, dat2=None):
+def serial_serro_wirte_cmd(id=None, w_cmd=None, dat1=None, dat2=None, serialHandle=None):
     '''
     写指令
     :param id:
@@ -61,6 +61,9 @@ def serial_serro_wirte_cmd(id=None, w_cmd=None, dat1=None, dat2=None):
     :param dat2:
     :return:
     '''
+
+    if serialHandle is None:
+        raise ValueError("serialHandle is None")
 
     buf = bytearray(b'\x55\x55')  # 帧头(frame header)
     buf.append(id)
@@ -87,7 +90,7 @@ def serial_serro_wirte_cmd(id=None, w_cmd=None, dat1=None, dat2=None):
     #     print('%x' %i)
     serialHandle.write(buf)  # 发送(send)
 
-def serial_servo_read_cmd(id=None, r_cmd=None):
+def serial_servo_read_cmd(id=None, r_cmd=None, serialHandle=None):
     '''
     发送读取命令
     :param id:
@@ -95,6 +98,10 @@ def serial_servo_read_cmd(id=None, r_cmd=None):
     :param dat:
     :return:
     '''
+
+    if serialHandle is None:
+        raise ValueError("serialHandle is None")
+
     buf = bytearray(b'\x55\x55')  # 帧头(frame header)
     buf.append(id)
     buf.append(3)  # 指令长度(command length)
@@ -103,12 +110,15 @@ def serial_servo_read_cmd(id=None, r_cmd=None):
     serialHandle.write(buf)  # 发送(send)
     time.sleep(0.00034)
 
-def serial_servo_get_rmsg(cmd):
+def serial_servo_get_rmsg(cmd, serialHandle=None):
     '''
     # 获取指定读取命令的数据
     :param cmd: 读取命令
     :return: 数据
     '''
+    if serialHandle is None:
+        raise ValueError("serialHandle is None")
+
     serialHandle.flushInput()  # 清空接收缓存(clear received chach)
     time.sleep(0.005)  # 稍作延时，等待接收完毕(Delay for a while and wait the reception to complete)
     count = serialHandle.inWaiting()    # 获取接收缓存中的字节数(get the number of bytes in the received buffer)
