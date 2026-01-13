@@ -3,9 +3,16 @@ from __future__ import annotations
 
 import argparse
 
-from logs.logging_setup import init, get_logger
-from components import EmergencyStop, ArmFSM, ArmController, SimServoBus, ServoMoveParams
-from components.arm_control import ArmConfig
+from .logs.logging_setup import init, get_logger
+
+from components.arm_fsm import ArmFSM
+from components.safety import EmergencyStop
+from components.servo_bus import SimServoBus, ServoMoveParams
+from components.arm_control import ArmController
+
+from kinematics.robotModel import RobotModel 
+from kinematics.matlabBackend import MatlabBackend
+import math
 
 
 def parse_args():
@@ -24,6 +31,15 @@ def main() -> None:
 
     estop = EmergencyStop()
     fsm = ArmFSM()
+    
+    robot = RobotModel(
+            a=[25, 315, 35, 0, 0, -296.23],
+            alpha=[math.pi/2, 0, math.pi/2, -math.pi/2, math.pi/2, 0],
+            d=[400, 0, 0, 365, 0, 161.44],
+            theta=[0, 0, 0, 0, 0, 0],
+            joint_limits=[[-2.094, 2.094]] * 6,
+        )
+    matlab = MatlabBackend()
 
     servo_ids = [1, 2, 3, 4, 5]
     q_home = [90.0, 90.0, 90.0, 90.0, 90.0]
