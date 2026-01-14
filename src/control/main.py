@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 
 from logs.logging_setup import init, get_logger
-from components import EmergencyStop, ArmFSM, ArmController, SimServoBus, ServoMoveParams
+from components import EmergencyStop, FSM, ArmController, SimServoBus, ServoMoveParams
 from components.arm_control import ArmConfig
 
 
@@ -23,19 +23,10 @@ def main() -> None:
     logger.info("Truss FSM starting")
 
     estop = EmergencyStop()
-    fsm = ArmFSM()
+    fsm = FSM()
 
     servo_ids = [1, 2, 3, 4, 5]
     q_home = [90.0, 90.0, 90.0, 90.0, 90.0]
-
-    # Sim bus for macOS; replace with real bus on Raspberry Pi.
-    bus = SimServoBus(servo_ids, q_home)
-
-    move_params = ServoMoveParams(
-        tolerance_deg=2.0,
-        poll_interval_s=0.10,
-        timeout_s=1.0,
-    )
 
     cfg = ArmConfig(
         servo_ids=servo_ids,

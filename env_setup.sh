@@ -3,6 +3,8 @@ set -e
 
 # This script sets up the environment for the Truss project.
 
+echo "Starting Environment Setup..."
+
 # Check for python3
 which python3 >/dev/null 2>&1
 if [ $? -ne 0 ]; then
@@ -17,6 +19,8 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+echo "Starting to venv setup"
+
 # Create virtual environment if missing
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."
@@ -26,7 +30,7 @@ fi
 # Activate virtual environment
 source venv/bin/activate
 
-# Upgrade pip (important for reliability)
+# Upgrade pip
 pip install --upgrade pip
 
 # Install dependencies if requirements.txt exists

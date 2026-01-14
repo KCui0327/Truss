@@ -1,6 +1,6 @@
 import inspect
 
-from components.arm_fsm import ArmFSM
+from components.arm_fsm import FSM
 from components.safety import EmergencyStop
 from components.servo_bus import SimServoBus, ServoMoveParams
 from components.arm_control import ArmController
@@ -49,7 +49,7 @@ def _make_controller(fsm, estop, bus, params, servo_ids, q_home):
 
 
 def test_controller_halts_when_estop_triggered():
-    fsm = ArmFSM()
+    fsm = FSM()
     estop = EmergencyStop()
 
     servo_ids = [1, 2, 3, 4, 5]
