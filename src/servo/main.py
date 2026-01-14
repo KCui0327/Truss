@@ -36,7 +36,6 @@ class ServoController:
             curr_backoff_index = 0
             while True:
                 actual_pos = servo_fns.getBusServoPulse(servo_id, self.serial_handle)
-                print(actual_pos)
                 if abs(actual_pos - target_pos) <= tol:
                     break
                 servo_fns.setBusServoPulse(servo_id, target_pos, 500, self.serial_handle)
@@ -48,11 +47,3 @@ class ServoController:
                     break
         except Exception as e:
             print(f"Error moving servo {servo_id}: {e}")
-
-
-""" servo = ServoController()
-
-#servo.return_home(5000)
-x=200
-print(f"target position: {servo.angle_to_pos(x)}")
-servo.move_servo_motor(1,x,5000) """
