@@ -7,6 +7,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
+from PIL import Image
+import time
 from datetime import datetime
 from ultralytics import YOLO
 from transformers import pipeline, AutoImageProcessor
@@ -17,7 +19,7 @@ Global Variables
 """
 
 DETECTION_MODEL_PATH = "models/object_detection/weights.pt"
-ESP32_CAMERA_URL     = ""
+ESP32_CAMERA_URL     = "http://192.168.2.39/capture"
 
 # resolves warnings about using a slower image processor
 processor = AutoImageProcessor.from_pretrained(
@@ -79,12 +81,19 @@ class Perception:
                 conf  = float(box.conf[0])
                 xyxy  = box.xyxy[0].cpu().numpy().astype(int)
                 print(f"image - {label} ({conf:.2f}) at {xyxy}")
-        save_image(img)
+                
+            if r.boxes.cls.numel() > 0: # only save image if there is a strawberry detected
+                print(r.boxes.cls)
+                save_image(results[0].plot()) 
+
         return results
     
     # Inference the Depth Anything V2 model on an image
-    def get_depth_estimation(self, img: str, strawberry_detections: list) -> list:
-        output = self.depth_model(img)
+    def get_depth_estimation(self, img: np.ndarray, strawberry_detections: list) -> list:
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) 
+        pil_img = Image.fromarray(img_rgb)
+
+        output = self.depth_model(pil_img)
         depth_map = np.array(output["depth"])
 
         ret = []
@@ -143,20 +152,22 @@ class Perception:
     
 if __name__ == "__main__":
     perception = Perception()
-    img = perception.fetch_image(ESP32_CAMERA_URL)
+    while True:
+        img = perception.fetch_image(ESP32_CAMERA_URL)
 
-    if img is not None:
-        detection_results = perception.detect_strawberry(img)
-        results = perception.get_depth_estimation(img, detection_results)
-        print("Depth estimation completed.")
+        if img is not None:
+            detection_results = perception.detect_strawberry(img)
+            results = perception.get_depth_estimation(img, detection_results)
+            print("Depth estimation completed.")
 
-        for res in results:
-            print(f"Detection at x: {res['cx']}, y: {res['cy']} has depth: {res['depth']}")
-        
-        if not TARGET_STRAWBERRY and results:
-            cx, cy, depth = random.choice(results)
-            TARGET_STRAWBERRY = (cx, cy, depth)
-        elif results:
-            TARGET_STRAWBERRY = tuple(perception.nearest_neighbour(results))
-        else:
-            raise ValueError("No strawberries detected!")
+            for res in results:
+                print(f"Detection at x: {res['cx']}, y: {res['cy']} has depth: {res['depth']}")
+            
+            if not TARGET_STRAWBERRY and results:
+                cx, cy, depth = random.choice(results)
+                TARGET_STRAWBERRY = (cx, cy, depth)
+            elif results:
+                TARGET_STRAWBERRY = tuple(perception.nearest_neighbour(results))
+            else:
+                raise ValueError("No strawberries detected!")
+        time.sleep(10)
