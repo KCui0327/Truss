@@ -11,13 +11,14 @@ from datetime import datetime
 from ultralytics import YOLO
 from transformers import pipeline, AutoImageProcessor
 from PIL import Image
+import time
 
 """
 Global Variables
 """
 
 DETECTION_MODEL_PATH = "models/object_detection/weights.pt"
-ESP32_CAMERA_URL     = ""
+ESP32_CAMERA_URL     = "http://192.168.2.39/capture"
 
 # resolves warnings about using a slower image processor
 processor = AutoImageProcessor.from_pretrained(
@@ -79,12 +80,18 @@ class Perception:
                 conf  = float(box.conf[0])
                 xyxy  = box.xyxy[0].cpu().numpy().astype(int)
                 print(f"image - {label} ({conf:.2f}) at {xyxy}")
-        save_image(img)
+                
+            if r.boxes.cls.numel() > 0: # only save image if there is a strawberry detected
+                save_image(results[0].plot()) 
+                
         return results
     
     # Inference the Depth Anything V2 model on an image
     def get_depth_estimation(self, img: str, strawberry_detections: list) -> list:
-        output = self.depth_model(img)
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) 
+        pil_img = Image.fromarray(img_rgb)
+
+        output = self.depth_model(pil_img)
         depth_map = np.array(output["depth"])
 
         ret = []
@@ -108,7 +115,7 @@ class Perception:
     def nearest_neighbour(self, strawberries: list) -> list:
         if TARGET_STRAWBERRY is None:
             raise ValueError("No target strawberry was chosen.")
-        if type(TARGET_STRAWBERRY) != list:
+        if type(TARGET_STRAWBERRY) != tuple:
             raise TypeError("The strawberries must be a list of strawberries")
         if len(TARGET_STRAWBERRY) != 3:
             raise ValueError("Invalid target position coordinates")
@@ -116,7 +123,10 @@ class Perception:
         min_3d_euclidean_dist = float('inf')
         ret = [-1, -1, -1]
     
-        for cx, cy, depth in strawberries:
+        for strawberry in strawberries: 
+            cx = strawberry['cx']
+            cy = strawberry['cy']
+            depth = strawberry['depth']
             euclidean_dist = np.linalg.norm(np.array([cx, cy, depth])-np.array(TARGET_STRAWBERRY))
             if euclidean_dist < min_3d_euclidean_dist:
                 min_3d_euclidean_dist = euclidean_dist
@@ -142,21 +152,27 @@ class Perception:
         plt.show()
     
 if __name__ == "__main__":
+    
     perception = Perception()
-    img = perception.fetch_image(ESP32_CAMERA_URL)
-
-    if img is not None:
-        detection_results = perception.detect_strawberry(img)
-        results = perception.get_depth_estimation(img, detection_results)
-        print("Depth estimation completed.")
-
-        for res in results:
-            print(f"Detection at x: {res['cx']}, y: {res['cy']} has depth: {res['depth']}")
+    while True:
+        img = perception.fetch_image(ESP32_CAMERA_URL)
         
-        if not TARGET_STRAWBERRY and results:
-            cx, cy, depth = random.choice(results)
-            TARGET_STRAWBERRY = (cx, cy, depth)
-        elif results:
-            TARGET_STRAWBERRY = tuple(perception.nearest_neighbour(results))
-        else:
-            raise ValueError("No strawberries detected!")
+        if img is not None:
+            detection_results = perception.detect_strawberry(img)
+            results = perception.get_depth_estimation(img, detection_results)
+            print("Depth estimation completed.")
+
+            for res in results:
+                print(f"Detection at x: {res['cx']}, y: {res['cy']} has depth: {res['depth']}")
+            
+            if not TARGET_STRAWBERRY and results:
+                target_dict = random.choice(results) # results contain a list of dictionaries of cx, cy, and depth values
+                cx = target_dict['cx']
+                cy = target_dict['cy']
+                depth = target_dict['depth']
+                TARGET_STRAWBERRY = (cx, cy, depth)
+            elif results:
+                TARGET_STRAWBERRY = tuple(perception.nearest_neighbour(results))
+            else:
+                raise ValueError("No strawberries detected!")
+        time.sleep(10)
