@@ -1,11 +1,7 @@
-# src/components/arm_fsm.py
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from transitions import Machine
-
 
 @dataclass
 class FaultInfo:
@@ -13,7 +9,7 @@ class FaultInfo:
     detail: str
 
 
-class ArmFSM:
+class FSM:
     """
     Finite State Machine for arm operations.
 
@@ -39,7 +35,7 @@ class ArmFSM:
 
         self.machine = Machine(
             model=self,
-            states=ArmFSM.states,
+            states=FSM.states,
             initial="IDLE",
             auto_transitions=False,
             ignore_invalid_triggers=False,

@@ -1,11 +1,10 @@
 import logging
-import logging.config
 import yaml
 from pathlib import Path
 
 _DEFAULT_CONFIG = Path(__file__).with_name("config.yaml")
 
-def init() -> None:
+def init():
     """
     Initialize the logging configuration from a YAML file.
     """
@@ -19,7 +18,7 @@ def init() -> None:
     
     logging.config.dictConfig(config)
 
-def get_logger(name: str) -> logging.Logger:
+def get_logger(name: str):
     """
     Get a logger with the specified name.
     """
