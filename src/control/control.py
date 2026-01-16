@@ -1,4 +1,4 @@
-from control.fsm import FSM
+from fsm import FSM
 import signal
 
 fsm = FSM()
