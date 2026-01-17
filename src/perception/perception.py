@@ -10,6 +10,7 @@ import matplotlib.patches as patches
 from datetime import datetime
 from ultralytics import YOLO
 from transformers import pipeline, AutoImageProcessor
+from sam2.sam2_image_predictor import SAM2ImagePredictor
 from PIL import Image
 import time
 
@@ -43,6 +44,9 @@ class Perception:
         self.depth_model = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Base-hf", image_processor=processor)
         if self.depth_model is None:
             raise ValueError("The Depth Estimation Model was not initialized properly.")
+        self.segementation_model = SAM2ImagePredictor.from_pretrained("facebook/sam2.1-hiera-tiny")
+        if self.segementation_model is None:
+            raise ValueError("The Segmentation Model was not initialized properly.")
     
     # Fetch a single JPEG from an ESP32 Camera
     def fetch_image(self, url: str) -> np.ndarray:
@@ -85,6 +89,21 @@ class Perception:
                 save_image(results[0].plot()) 
                 
         return results
+
+    def segment_image(self, img: np.ndarray, box: np.ndarray) -> np.ndarray:
+        if img is None or not isinstance(img, np.ndarray):
+            raise ValueError("Invalid image provided for segmentation.")
+        if not box or not isinstance(box, np.ndarray):
+            raise ValueError("Invalid box provided for segmentation.")
+        
+        # refer to SAM2 documentation for more details
+        # link: https://huggingface.co/facebook/sam2.1-hiera-tiny
+        img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)) # SAM works with RBG images
+        self.segementation_model.set_image(img)
+        masks, _, _ = self.segementation_model.predict(box=box, multimask_output=False)
+        # masks are binary representations of the segmented objects in the image
+
+        return masks[0]
     
     # Inference the Depth Anything V2 model on an image
     def get_depth_estimation(self, img: str, strawberry_detections: list) -> list:
