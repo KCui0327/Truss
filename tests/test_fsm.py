@@ -1,5 +1,5 @@
 # tests/test_fsm.py
-from components.arm_fsm import FSM
+from control.fsm import FSM
 
 
 def test_halt_from_idle():
