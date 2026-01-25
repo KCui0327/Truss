@@ -4,21 +4,62 @@ Truss Web Server
 """
 
 from flask import Flask, request, jsonify
+import requests
 from flask_socketio import SocketIO, send
+
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins='*')
 
+THRESHOLD = 0.10  
+registered_tokens = set()
 sensor_data = {
     'temperature': None,
     'humidity': None,
-    'pH': None
+    'light': None
 }
+
+# Determines if the change between two sensor measuremmenst exceeds threshhold
+def delta_exceed_threshold(oldVal, newVal):
+  if not oldVal:
+      return True
+  if oldVal == 0:
+    return newVal == 0
+
+  delta = abs(newVal - oldVal)
+  limit = abs(oldVal) * THRESHOLD
+  return delta <= limit
+
 
 @app.route('/')
 def root():
     return "This is the root endpoint of the Truss' web server."
 
+@app.route('/register_device', methods=['POST'])
+def register_device():
+    print("here")
+    data = request.json
+    if data and 'token' in data:
+        token = data['token']
+        registered_tokens.add(token)
+        print(f"Device registered: {token}")
+        return jsonify({"message": "Token registered successfully"}), 200
+    return jsonify({"error": "Invalid token data"}), 400
+
+def send_push_notification(title, message):
+    url = "https://exp.host/--/api/v2/push/send"
+    for token in registered_tokens:
+        payload = {
+            "to": token,
+            "title": title,
+            "body": message,
+            "sound": "default",
+        }
+        try:
+            requests.post(url, json=payload)
+        except Exception as e:
+            print(f"Failed to send notification: {e}")
+            
 @app.route('/temperature', methods=['POST'])
 def temperature():
     if request.method == 'POST':
@@ -28,8 +69,17 @@ def temperature():
             if not (-50 <= data['temperature'] <= 100):
                 return jsonify({"error": "Invalid temperature value. It must be between -50 and 100."}), 400
             
-            sensor_data['temperature'] = data['temperature']
+            newValue = data['temperature']
+            oldValue = sensor_data['temperature']
+
+            sensor_data['temperature'] = newValue
             socketio.emit('temperature sensor data update', {'temperature': sensor_data['temperature']})
+            if delta_exceed_threshold(oldValue, newValue) or (oldValue >= 15 and oldValue <= 18):
+                if (newValue > 18):
+                    send_push_notification(f"High Temperature Alert", f"Current temperature is {newValue}° Celsius")
+                elif (newValue < 15):
+                    send_push_notification(f"Low Temperature Alert", f"Current temperature is {newValue}° Celsius")
+
             return jsonify({"message": f"Received temperature data: {sensor_data['temperature']}"}), 200
         else:
             return jsonify({"error": "Invalid data format. Please provide temperature data in JSON format."}), 400
@@ -42,31 +92,37 @@ def humidity():
         data = request.json
 
         if data and type(data) is dict and 'humidity' in data:
-            if not (0 <= data['humidity'] <= 100):
-                return jsonify({"error": "Invalid humidity value. It must be between 0 and 100."}), 400
+            newValue = data['humidity']
+            oldValue = sensor_data['humidity']
 
-            sensor_data['humidity'] = data['humidity']
+            sensor_data['humidity'] = newValue
             socketio.emit('humidity sensor data update', {'humidity': sensor_data['humidity']})
+
+            if delta_exceed_threshold(oldValue, newValue) or (oldValue >= 65 and oldValue <= 75):
+                if (newValue > 75):
+                    send_push_notification(f"High Humidity Alert", f"Current humidity is {newValue}%")
+                elif (newValue < 65):
+                    send_push_notification(f"Low Humidity Alert", f"Current humidity is {newValue}%")
             return jsonify({"message": f"Received humidity data: {sensor_data['humidity']}"}), 200
         else:
             return jsonify({"error": "Invalid data format. Please provide humidity data in JSON format."}), 400
 
     return jsonify({"message": "Method not allowed. Please use POST."}), 405
 
-@app.route('/pH', methods=['POST'])
-def pH():
+@app.route('/light', methods=['POST'])
+def light():
     if request.method == 'POST':
         data = request.json
 
-        if data and type(data) is dict and 'pH' in data:
-            if not (0 <= data['pH'] <= 14):
-                return jsonify({"error": "Invalid pH value. It must be between 0 and 14."}), 400
+        if data and type(data) is dict and 'light' in data:
+            if not (0 <= data['light'] <= 14):
+                return jsonify({"error": "Invalid light value. It must be between 0 and 14."}), 400
             
-            sensor_data['pH'] = data['pH']
-            socketio.emit('pH sensor data update', {'pH': sensor_data['pH']})
-            return jsonify({"message": f"Received pH data: {sensor_data['pH']}"}), 200
+            sensor_data['light'] = data['light']
+            socketio.emit('light sensor data update', {'light': sensor_data['light']})
+            return jsonify({"message": f"Received light data: {sensor_data['light']}"}), 200
         else:
-            return jsonify({"error": "Invalid data format. Please provide pH data in JSON format."}), 400
+            return jsonify({"error": "Invalid data format. Please provide light data in JSON format."}), 400
 
     return jsonify({"message": "Method not allowed. Please use POST."}), 405
 
@@ -76,4 +132,4 @@ def webhook_stolon():
     send({'message': 'Welcome! You are now connected to the Truss Web Server.'})
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=12345, debug=True)
+    socketio.run(app, host='0.0.0.0', port=12345, debug=False)
