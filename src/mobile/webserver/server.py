@@ -19,7 +19,7 @@ sensor_data = {
     'light': None
 }
 
-# Determines if the change between two sensor measuremmenst exceeds threshhold
+# Determines if the change between two sensor measurements exceeds threshold
 def delta_exceed_threshold(oldVal, newVal):
   if not oldVal:
       return True
@@ -37,7 +37,6 @@ def root():
 
 @app.route('/register_device', methods=['POST'])
 def register_device():
-    print("here")
     data = request.json
     if data and 'token' in data:
         token = data['token']
