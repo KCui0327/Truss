@@ -1,9 +1,16 @@
 import numpy as np
-import matlab.engine
 import os
+
+try:
+    import matlab.engine
+    MATLAB_AVAILABLE = True
+except ImportError:
+    MATLAB_AVAILABLE = False
 
 class MatlabBackend:
     def __init__(self):
+        if not MATLAB_AVAILABLE:
+            raise RuntimeError("MATLAB Engine is not installed. Install MATLAB and the MATLAB Engine for Python.")
         project_dir = os.path.dirname(__file__)
         self.eng = matlab.engine.start_matlab()
         self.eng.addpath(project_dir, nargout=0) # tell the engine to read matlab files in this directory
