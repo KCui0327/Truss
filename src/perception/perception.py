@@ -194,7 +194,8 @@ class Perception:
 if __name__ == "__main__":
     perception = Perception()
     while True:
-        img = perception.fetch_image(ESP32_CAMERA_URL)
+        # img = perception.fetch_image(ESP32_CAMERA_URL)
+        img = cv2.imread("test_img.jpg", cv2.IMREAD_COLOR)
         
         if img is not None:
             detections = perception.detect_strawberry(img)
