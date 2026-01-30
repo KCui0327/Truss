@@ -173,11 +173,12 @@ class Perception:
         return depth_map
     
     def word_coords_transform(self) -> None:
-        # TODO: Fill in camera intrinsic parameters
-        fx, fy = None, None  # Focal length in pixels along x-axis and y-axis
-        cx_intrinsic, cy_intrinsic = None, None  # Principal point x-coordinate and y-coordinate in pixels
+        # ESP 32 Camera Intrinsics
+        fx, fy = 574.63852299, 574.02980747  # Focal length in pixels along x-axis and y-axis
+        cx_intrinsic, cy_intrinsic = 290.49412584, 276.20316581  # Principal point x-coordinate and y-coordinate in pixels
 
         t_x, t_y, t_depth = TARGET_STRAWBERRY.x, TARGET_STRAWBERRY.y, TARGET_STRAWBERRY.depth
+        t_depth *= 1000  # convert m to mm
 
         x = (t_x - cx_intrinsic) * t_depth / fx
         y = (t_y - cy_intrinsic) * t_depth / fy
