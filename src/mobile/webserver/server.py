@@ -10,6 +10,7 @@ import os
 import signal
 
 
+
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins='*')
 
@@ -79,24 +80,6 @@ def send_push_notification(title, message):
         except Exception as e:
             print(f"Failed to send notification: {e}")
             
-@app.route('/emergency_stop', methods=['POST'])
-def emergency_stop():
-    if request.method == 'POST':
-        if os.getenv('CONTROL_PROC_PID') is None:
-            return jsonify({"error": "The PID for control process was not found on server end."}), 400
-        
-        try:
-            control_proc_pid = int(os.getenv('CONTROL_PROC_PID'))
-            os.kill(control_proc_pid, signal.SIGTERM)  # Send SIGTERM to the control process
-        except ValueError:
-            return jsonify({"error": "Invalid control process PID."}), 400
-        except ProcessLookupError:
-            return jsonify({"error": "Control process not found."}), 404
-        
-        return jsonify({"message": "Emergency stop signal processed."}), 200
-
-    return jsonify({"message": "Method not allowed. Please use POST."}), 405
-
 @app.route('/temperature', methods=['POST'])
 def temperature():
     if request.method == 'POST':
