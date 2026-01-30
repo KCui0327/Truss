@@ -1,9 +1,11 @@
-from src.kinematics.robotModel import RobotModel 
-from src.kinematics.matlabBackend import MatlabBackend
+from kinematics.robotModel import RobotModel 
+from kinematics.matlabBackend import MatlabBackend, MATLAB_AVAILABLE
 import math
 import numpy as np
 import logging
+import pytest
 
+@pytest.mark.skipif(not MATLAB_AVAILABLE, reason="MATLAB not installed")
 def test_inverse_kinematics_returns_correct_joint_values():
     robot = RobotModel(
             a=[25, 315, 35, 0, 0, -296.23],
@@ -23,6 +25,3 @@ def test_inverse_kinematics_returns_correct_joint_values():
     logging.info(f"q_original: {q_original}")
     logging.info(f"q_computed: {q_computed}")
     np.testing.assert_allclose(q_original, q_computed, rtol=1e-5, atol=1e-8)
-    
-    
-test_inverse_kinematics_returns_correct_joint_values()
