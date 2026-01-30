@@ -22,7 +22,7 @@ ESP32_CAMERA_URL     = "http://192.168.2.39/capture"
 
 # resolves warnings about using a slower image processor
 processor = AutoImageProcessor.from_pretrained(
-    "depth-anything/Depth-Anything-V2-Base-hf",
+    "depth-anything/Depth-Anything-V2-Metric-Outdoor-Base-hf",
     use_fast=True
 )
 
@@ -44,7 +44,7 @@ class Perception:
         if self.detection_model is None:
             raise ValueError("The Ripeness Detection Model was not initialized properly.")
         # Depth Anything V2 Model Initialization
-        self.depth_model = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Base-hf", image_processor=processor)
+        self.depth_model = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Metric-Outdoor-Base-hf", image_processor=processor)
         if self.depth_model is None:
             raise ValueError("The Depth Estimation Model was not initialized properly.")
         self.segementation_model = Client("akhaliq/sam3")
@@ -175,6 +175,22 @@ class Perception:
 
         return depth_map
     
+    def word_coords_transform(self) -> None:
+        # ESP 32 Camera Intrinsics
+        fx, fy = 574.63852299, 574.02980747  # Focal length in pixels along x-axis and y-axis
+        cx_intrinsic, cy_intrinsic = 290.49412584, 276.20316581  # Principal point x-coordinate and y-coordinate in pixels
+
+        t_x, t_y, t_depth = TARGET_STRAWBERRY.x, TARGET_STRAWBERRY.y, TARGET_STRAWBERRY.depth
+        t_depth *= 1000  # convert m to mm
+
+        x = (t_x - cx_intrinsic) * t_depth / fx
+        y = (t_y - cy_intrinsic) * t_depth / fy
+        z = t_depth
+
+        TARGET_STRAWBERRY.x = x
+        TARGET_STRAWBERRY.y = y
+        TARGET_STRAWBERRY.depth = z
+    
     # Determines new target strawberries' coordinate based on new frame
     # algorithm: min. 3D Euclidean Distance
     def nearest_neighbour(self, strawberries: list) -> None:
@@ -215,6 +231,8 @@ if __name__ == "__main__":
                     y=t_y,
                     depth=t_depth,
                 )
+
+                perception.word_coords_transform()
 
                 print(f"Target Strawberry Coordinates (x, y, depth): ({TARGET_STRAWBERRY.x}, {TARGET_STRAWBERRY.y}, {TARGET_STRAWBERRY.depth})")
             
