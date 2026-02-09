@@ -6,6 +6,7 @@ This code is intended for controlling servos via a USB interface.
 """
 
 from driver.servo_driver import *
+import time
 
 def setBusServoID(oldid, newid, serialHandle=None):
     """
@@ -53,7 +54,7 @@ def setBusServoPulse(id, pulse, use_time, serialHandle=None):
     serial_serro_wirte_cmd(id, LOBOT_SERVO_MOVE_TIME_WRITE, pulse, use_time, serialHandle)
     return pulse  #x新增反馈可以删除\
 
-def getBusServoPulse(id, serialHandle=None):
+def getBusServoPulse(id, serialHandle=None, timeout=1):
     '''
     读取舵机当前位置
     :param id:
@@ -62,11 +63,16 @@ def getBusServoPulse(id, serialHandle=None):
     if serialHandle is None:
         raise ValueError("serialHandle is None")
 
-    while True:
+    #CUSTOM TIMEOUT
+    start = time.time()
+    end = start
+    while (end - start) <= timeout:
         serial_servo_read_cmd(id, LOBOT_SERVO_POS_READ, serialHandle)
         msg = serial_servo_get_rmsg(LOBOT_SERVO_POS_READ, serialHandle)
         if msg is not None:
             return msg
+        end = time.time()
+    return None
 
 def getBusServoTemp(id, serialHandle=None):
     '''
