@@ -1,17 +1,17 @@
+import os
 import cv2
-from huggingface_hub import hf_hub_download
-import requests
-import torch
+import time
 import random
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
+import requests
 
+import numpy as np
+
+from dataclasses import dataclass
 from datetime import datetime
 from ultralytics import YOLO
 from transformers import pipeline, AutoImageProcessor
+from gradio_client import Client, handle_file
 from PIL import Image
-import time
 
 """
 Global Variables
@@ -26,7 +26,11 @@ processor = AutoImageProcessor.from_pretrained(
     use_fast=True
 )
 
-TARGET_STRAWBERRY = None
+@dataclass
+class TargetStrawberry:
+    x: float
+    y: float
+    depth: float
 
 """
 Perception Module
@@ -43,6 +47,9 @@ class Perception:
         self.depth_model = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Base-hf", image_processor=processor)
         if self.depth_model is None:
             raise ValueError("The Depth Estimation Model was not initialized properly.")
+        self.segementation_model = Client("akhaliq/sam3")
+        if self.segementation_model is None:
+            raise ValueError("The Segmentation Model was not initialized properly.")
     
     # Fetch a single JPEG from an ESP32 Camera
     def fetch_image(self, url: str) -> np.ndarray:
@@ -56,7 +63,6 @@ class Perception:
         except Exception as e:
             print(f"Failed to fetch image from {url}: {e}")
             return None
-    
         return cv2.imdecode(img_array, cv2.IMREAD_COLOR)
 
     # Inference the YOLO model on an image
@@ -68,60 +74,114 @@ class Perception:
         
         def save_image(img: np.ndarray) -> str:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"image_{timestamp}.jpg"
+            filename = f"detections/image_{timestamp}.jpg"
             cv2.imwrite(filename, img)
             return filename
         
-        results = self.detection_model(img)
-        for r in results:
+        detections = self.detection_model(img)
+        ret = []
+        for r in detections:
             for box in r.boxes:
                 cls_id = int(box.cls[0])
                 label = self.detection_model.names[cls_id]
                 conf  = float(box.conf[0])
                 xyxy  = box.xyxy[0].cpu().numpy().astype(int)
+                x1, y1, x2, y2 = xyxy
+                cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+                ret.append((cx, cy, label, conf, (x1, y1, x2, y2)))
                 print(f"image - {label} ({conf:.2f}) at {xyxy}")
                 
             if r.boxes.cls.numel() > 0: # only save image if there is a strawberry detected
-                save_image(results[0].plot()) 
+                save_image(detections[0].plot()) 
                 
-        return results
+        return ret
+
+    # Get the target stem coordinate given the center of the target strawberry
+    def get_target_stem_coordinate(self, img: np.ndarray, cx: np.int64, cy: np.int64) -> tuple:
+        if not isinstance(img, np.ndarray):
+            raise TypeError("Incorrect image input type. Expected np.ndarray.")
+        if img is None or img.size == 0:
+            raise ValueError("Empty image provided for stem coordinate extraction.")
+        if not isinstance(cx, np.int64) or not isinstance(cy, np.int64):
+            raise TypeError("Center coordinates must be integers.")
+        if cx < 0 or cy < 0 or cx >= img.shape[1] or cy >= img.shape[0]:
+            raise ValueError("Center coordinates are out of image bounds.")
+        
+        stem_coords = self.segment_image(img)
+        if not stem_coords:
+            raise ValueError("No stem coordinates were found.")
+        
+        min_dist = float('inf')
+        target_stem_coord = (-1, -1)
+        for coord in stem_coords:
+            # a little offset to approximate the stem base
+            dist = np.linalg.norm(np.array([cx, cy+5]) - np.array(coord))
+            if dist < min_dist:
+                min_dist = dist
+                target_stem_coord = coord
     
+        return target_stem_coord
+
+    # HF SAM3 API call for segmenting the stem
+    def segment_image(self, img: np.ndarray) -> None:
+        if not isinstance(img, np.ndarray):
+            raise TypeError("Incorrect image input type. Expected np.ndarray.")
+        if img is None or img.size == 0:
+            raise ValueError("Empty image provided for segmentation.")
+        
+        cv2.imwrite("/tmp/curr_view.jpg", img)
+        if not os.path.exists("/tmp/curr_view.jpg"):
+            raise FileNotFoundError("Temporary image file was not created successfully.")
+        
+        result = self.segementation_model.predict(
+            image=handle_file("/tmp/curr_view.jpg"),
+            text="Strawberry Stem",
+            threshold=0.6,
+            mask_threshold=0.5,
+            api_name="/segment"
+        )
+
+        os.remove("/tmp/curr_view.jpg")
+
+        res = result[0]
+        locs = []
+        for annot in res['annotations']:
+            stem_img = cv2.imread(annot['image']) # masked as red
+            b, g, r = cv2.split(stem_img) # split into color channels
+
+            mask = (r > 150) & (g < 80) & (b < 80) # get red mask
+
+            # bunch of coordinates where mask is true and just randomly pick one
+            ys, xs = np.where(mask)
+            coords = list(zip(xs, ys))
+            rand_coord = random.choice(coords)
+            xs, ys = rand_coord
+            locs.append((xs, ys))
+        
+        return locs
+        
     # Inference the Depth Anything V2 model on an image
-    def get_depth_estimation(self, img: str, strawberry_detections: list) -> list:
+    def get_depth_estimation(self, img: np.ndarray) -> list:
+        if not isinstance(img, np.ndarray):
+            raise TypeError("Incorrect image input type. Expected np.ndarray.")
+        if img is None or img.size == 0:
+            raise ValueError("Empty image provided for depth estimation.")
+        
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) 
         pil_img = Image.fromarray(img_rgb)
 
         output = self.depth_model(pil_img)
         depth_map = np.array(output["depth"])
 
-        ret = []
-
-        for r in strawberry_detections:
-            for box in r.boxes:
-                xyxy = box.xyxy[0].cpu().numpy().astype(int)
-                x1, y1, x2, y2 = xyxy
-                center_x, center_y = (x1 + x2) // 2, (y1 + y2) // 2
-                depth_value = depth_map[center_y, center_x]
-                ret.append({
-                    "cx": center_x,
-                    "cy": center_y,
-                    "depth": depth_value
-                })
-
-        return ret
-
+        return depth_map
+    
     # Determines new target strawberries' coordinate based on new frame
     # algorithm: min. 3D Euclidean Distance
-    def nearest_neighbour(self, strawberries: list) -> list:
-        if TARGET_STRAWBERRY is None:
-            raise ValueError("No target strawberry was chosen.")
-        if type(TARGET_STRAWBERRY) != tuple:
-            raise TypeError("The strawberries must be a list of strawberries")
-        if len(TARGET_STRAWBERRY) != 3:
-            raise ValueError("Invalid target position coordinates")
+    def nearest_neighbour(self, strawberries: list) -> None:
+        if strawberries is None or len(strawberries) == 0:
+            raise ValueError("No strawberries provided for nearest neighbour calculation.")
         
         min_3d_euclidean_dist = float('inf')
-        ret = [-1, -1, -1]
     
         for strawberry in strawberries: 
             cx = strawberry['cx']
@@ -130,49 +190,32 @@ class Perception:
             euclidean_dist = np.linalg.norm(np.array([cx, cy, depth])-np.array(TARGET_STRAWBERRY))
             if euclidean_dist < min_3d_euclidean_dist:
                 min_3d_euclidean_dist = euclidean_dist
-                ret = [cx, cy, depth]
+                TARGET_STRAWBERRY = TargetStrawberry(cx, cy, depth)
         
-        return ret
+        return
 
-    # Plots strawberry plant and ripe strawberries
-    def plot_strawberry_plant(self, img: str, detections: list) -> None:
-        _, ax = plt.subplots()
-        ax.imshow(img)
-
-        for d in detections:
-            for box in d.boxes:
-                xywh = box.xywh
-                cx, cy, w, h = xywh[0].cpu().numpy()
-                x = cx - w / 2
-                y = cy - h / 2
-
-                rect = patches.Rectangle((x, y), w, h, linewidth=1, facecolor='none')
-                ax.add_patch(rect)
-
-        plt.show()
-    
 if __name__ == "__main__":
-    
     perception = Perception()
     while True:
         img = perception.fetch_image(ESP32_CAMERA_URL)
         
         if img is not None:
-            detection_results = perception.detect_strawberry(img)
-            results = perception.get_depth_estimation(img, detection_results)
-            print("Depth estimation completed.")
+            detections = perception.detect_strawberry(img)
+            if detections:
+                # pick a random ripe strawberry as target
+                target_xy = random.choice(detections)
+                t_cx, t_cy, _, _, _ = target_xy
 
-            for res in results:
-                print(f"Detection at x: {res['cx']}, y: {res['cy']} has depth: {res['depth']}")
+                stem_coords = perception.get_target_stem_coordinate(img, t_cx, t_cy)
+                t_x, t_y = stem_coords
+                depth_map = perception.get_depth_estimation(img)
+                t_depth = depth_map[t_y, t_x]
+                TARGET_STRAWBERRY = TargetStrawberry(
+                    x=t_x,
+                    y=t_y,
+                    depth=t_depth,
+                )
+
+                print(f"Target Strawberry Coordinates (x, y, depth): ({TARGET_STRAWBERRY.x}, {TARGET_STRAWBERRY.y}, {TARGET_STRAWBERRY.depth})")
             
-            if not TARGET_STRAWBERRY and results:
-                target_dict = random.choice(results) # results contain a list of dictionaries of cx, cy, and depth values
-                cx = target_dict['cx']
-                cy = target_dict['cy']
-                depth = target_dict['depth']
-                TARGET_STRAWBERRY = (cx, cy, depth)
-            elif results:
-                TARGET_STRAWBERRY = tuple(perception.nearest_neighbour(results))
-            else:
-                raise ValueError("No strawberries detected!")
-        time.sleep(10)
+        time.sleep(10) # 10 seconds
