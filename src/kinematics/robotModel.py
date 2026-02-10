@@ -6,6 +6,11 @@ class RobotModel:
     dh_table: np.ndarray        # shape (n, 4): [a, alpha, d, theta_offset]
     joint_limits: np.ndarray    # shape (n, 2): [min, max]
 
+
+    #  a=[25, 315, 35, 0, 0, -296.23]
+    #  alpha=[math.pi/2, 0, math.pi/2, -math.pi/2, math.pi/2, 0]
+    #  d=[400, 0, 0, 365, 0, 161.44]
+    #  theta=[0, 0, 0, 0, 0, 0]
     def __init__(
         self,
         *,
