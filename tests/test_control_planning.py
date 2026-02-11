@@ -258,7 +258,7 @@ class TestIKSolverIntegration:
     def test_ik_forward_backward_roundtrip(self, robot_model):
         """
         Legacy round-trip test (FK -> IK) that compares joint vectors.
-        May skip; IK can be multi-solution. Keep only if it matches your backend behavior.
+        May skip; IK can be multi-solution. Keep only if it matches backend behavior.
         """
         try:
             matlab_backend = MatlabBackend()

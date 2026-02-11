@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from transitions import Machine
+
 
 @dataclass
 class FaultInfo:
@@ -13,9 +14,10 @@ class FSM:
     """
     Finite State Machine for arm operations.
 
-    Pattern:
-      - Controller drives the FSM transitions.
-      - FSM tracks state and provides safety transitions (halt/fault).
+    Controller-driven pattern:
+      - ControlSystem.run() triggers transitions.
+      - State methods (home/perceive/plan/move/...) DO NOT mutate the FSM.
+      - Safety triggers (halt/faulted) are always available.
     """
 
     states = [
@@ -50,7 +52,7 @@ class FSM:
         self.machine.add_transition("cut_ok", "CUT", "RETURN")
         self.machine.add_transition("return_ok", "RETURN", "PERCEIVE")
 
-        # Recovery / loops
+        # Recovery
         self.machine.add_transition("no_target", "PERCEIVE", "HOME")
         self.machine.add_transition("plan_fail", "PLAN", "HOME")
         self.machine.add_transition("move_fail", "MOVE", "HOME")
@@ -60,7 +62,6 @@ class FSM:
         self.machine.add_transition("faulted", "*", "FAULT", before="on_faulted")
 
     def on_halt(self) -> None:
-        # Placeholders for telemetry hooks (log reason elsewhere)
         return
 
     def on_faulted(self, code: str = "unknown", detail: str = "") -> None:
