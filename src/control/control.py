@@ -91,7 +91,7 @@ class ControlSystem:
 
     def _initialize_robot_model(self) -> None:
         try:
-            # Your DH parameters -> RobotModel stores dh_table internally
+            # DH parameters -> RobotModel stores dh_table internally
             self.robot_model = RobotModel(
                 a=[25, 315, 35, 0, 0, -296.23],
                 alpha=[math.pi / 2, 0, math.pi / 2, -math.pi / 2, math.pi / 2, 0],
