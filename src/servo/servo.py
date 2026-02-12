@@ -2,8 +2,13 @@ import serial
 import time
 import driver.servo_fns as servo_fns
 
-HOME_ANGLE = None #TODO: Define the home angle position
-EXPONENTIAL_BACKOFF_BASE = [0.5, 1]  # in seconds
+home_position = [120,120,210,120,120] #Mapped to matlab angles
+stable_home_position = [120,120,180,210,120] # Better home configuration practically
+
+polarity_vec = [1, 1, -1, 1, 1]
+offset_vec = [120.0, 17.94, 467.94, 120.0, 120.0]
+
+EXPONENTIAL_BACKOFF_BASE = [2, 4, 6]  # in seconds
 
 class ServoController:
     def __init__(self):
@@ -18,27 +23,85 @@ class ServoController:
     def pos_to_angle(self, pos):
         return int(pos * (240/1000))
 
-    def return_home(self, duration):
-        servo_fns.setBusServoPulse(1, self.angle_to_pos(HOME_ANGLE), duration, self.serial_handle)
-        servo_fns.setBusServoPulse(2, self.angle_to_pos(HOME_ANGLE), duration, self.serial_handle)
-        servo_fns.setBusServoPulse(3, self.angle_to_pos(HOME_ANGLE), duration, self.serial_handle)
-        servo_fns.setBusServoPulse(4, self.angle_to_pos(HOME_ANGLE), duration, self.serial_handle)
-        servo_fns.setBusServoPulse(5, self.angle_to_pos(HOME_ANGLE), duration, self.serial_handle)
+    def return_home(self, duration, parallel=False):
+        """ 
+        Return robot to home configuration
 
-        time.sleep(duration + 500)  # Wait for the movement to complete
+        Args:
+            duration: time in milliseconds (0-30000)
+                Note: Adding soft min limit of 500ms
+            parallel: 
+                True - run servos together
+                False - run one by one
+                
+        Return: None
+        """
+        if duration < 500 or duration > 30000:
+            raise ValueError(f"Invalid duration: {duration}\nValid between 500-30000")
+        if not parallel:
+            for i, angle in enumerate(stable_home_position):
+                print(f"Moving servo {i+1}")
+                self.move_servo_motor(i+1, angle, duration)
+        else:
+            for i, angle in enumerate(stable_home_position):
+                servo_fns.setBusServoPulse(i+1, self.angle_to_pos(angle), duration, self.serial_handle)
+            time.sleep(duration / 1000)  # Wait for the movement to complete
     
+    def move_robot(self, angle_list, duration, parallel=False):
+        """ 
+        Move robot to user-defined angle configuration
+
+        Args:
+            angle_list: [5x1] List of servo motor angles
+            duration: time in milliseconds (0-30000)
+                Note: Adding soft min limit of 500ms
+                
+        Return: None
+        """
+        if duration < 500 or duration > 30000:
+            raise ValueError(f"Invalid duration: {duration}\nValid between 500-30000")
+        
+        if not parallel:
+            for i, angle in enumerate(angle_list):
+                print(f"Moving servo {i+1}")
+                self.move_servo_motor(i+1, angle, duration)
+        else:
+            for i, angle in enumerate(angle_list):
+                servo_fns.setBusServoPulse(i+1, self.angle_to_pos(angle), duration, self.serial_handle)
+            time.sleep(duration / 1000)  # Wait for the movement to complete
+
     def move_servo_motor(self, servo_id, angle, duration, tol=10):
+        """ 
+        Move servo motor to angle within duration (ms)
+
+        Args:
+            servo_id: servo id
+            angle: servo angle (0-240)
+            duration: time in milliseconds (0-30000)
+                Note: Adding soft min limit of 500ms
+            tol: tolerance of target position error (default +/- 10 positions)
+                
+        Return: None
+        """
         try:
+            if not 0 <= angle <= 240:
+                raise ValueError(f"Invalid angle: {angle}")
+            if duration < 500 or duration > 30000:
+                raise ValueError(f"Invalid duration: {duration}\nValid between 500-30000")  
+
             target_pos = self.angle_to_pos(angle)
             servo_fns.setBusServoPulse(servo_id, target_pos, duration, self.serial_handle)
             time.sleep(duration / 1000)  # Wait for the movement to complete
 
             curr_backoff_index = 0
             while True:
-                actual_pos = servo_fns.getBusServoPulse(servo_id, self.serial_handle)
+                actual_pos = servo_fns.getBusServoPulse(servo_id, self.serial_handle, timeout=1)
+                if actual_pos is None:
+                    raise TimeoutError(f"Timeout Error: Servo Read Timeout after 1 second")
+
                 if abs(actual_pos - target_pos) <= tol:
                     break
-                servo_fns.setBusServoPulse(servo_id, target_pos, 500, self.serial_handle)
+                servo_fns.setBusServoPulse(servo_id, target_pos, EXPONENTIAL_BACKOFF_BASE[curr_backoff_index] * 1000, self.serial_handle)
                 time.sleep(EXPONENTIAL_BACKOFF_BASE[curr_backoff_index])  # Sleep for the first backoff duration
                 if curr_backoff_index < len(EXPONENTIAL_BACKOFF_BASE) - 1:
                     curr_backoff_index += 1
@@ -47,3 +110,48 @@ class ServoController:
                     break
         except Exception as e:
             print(f"Error moving servo {servo_id}: {e}")
+
+    def get_servo_angle(self, servo_id, timeout=1):
+        """ 
+        Get servo angle
+
+        Args:
+            servo_id: servo id
+            timeout: Timeout value for servo read (default 1 second)
+                
+        Return: servo_id's angle (in degrees)
+        """
+        try:
+            actual_pos = servo_fns.getBusServoPulse(servo_id, self.serial_handle, timeout)
+            if actual_pos is None:
+                raise TimeoutError(f"Timeout Error: Servo Read Timeout after 1 second")
+        except Exception as e:
+            print(f"Error reading servo {servo_id}: {e}")
+            return None
+        return self.pos_to_angle(actual_pos)
+
+
+def matlab_to_servo_angles(matlab_q):
+    servo_q = [0] * 5
+
+    for i in range(5):
+        # y = Ax + B
+        servo_q[i] = polarity_vec[i] * matlab_q[i] + offset_vec[i]
+
+    return servo_q
+
+if __name__ == "__main__":
+    print("Sandbox code")
+    servo = ServoController()
+
+    # Matlab Angles Example (Move to home position)
+    #servo_position = matlab_to_servo_angles([0, 102.06, 257.94, 0, 0])
+    #servo.move_robot(servo_position, 8000, parallel=True)
+
+    # Return Home Example
+    #servo.return_home(8000,parallel=True)
+
+    # Get Angle Example
+    #servo_3_angle = servo.get_servo_angle(3)
+    #print(servo_3_angle)
+    
