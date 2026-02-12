@@ -10,4 +10,4 @@ To set up the project environment, run the provided bash script:
 bash env_setup.sh
 ```
 
-This script will install all necessary dependencies and prepare your environment for development and deployment.
+This script will install all necessary dependencies and prepare environment for development and deployment.
