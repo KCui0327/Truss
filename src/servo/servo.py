@@ -5,6 +5,9 @@ import driver.servo_fns as servo_fns
 home_position = [120,120,210,120,120] #Mapped to matlab angles
 stable_home_position = [120,120,180,210,120] # Better home configuration practically
 
+polarity_vec = [1, 1, -1, 1, 1]
+offset_vec = [120.0, 17.94, 467.94, 120.0, 120.0]
+
 EXPONENTIAL_BACKOFF_BASE = [2, 4, 6]  # in seconds
 
 class ServoController:
@@ -92,12 +95,9 @@ class ServoController:
 
             curr_backoff_index = 0
             while True:
-                print("Before blocking call")
-                actual_pos = servo_fns.getBusServoPulse(servo_id, self.serial_handle, timeout=1) # blocking call, need timeout
+                actual_pos = servo_fns.getBusServoPulse(servo_id, self.serial_handle, timeout=1)
                 if actual_pos is None:
                     raise TimeoutError(f"Timeout Error: Servo Read Timeout after 1 second")
-
-                print("After blocking call")
 
                 if abs(actual_pos - target_pos) <= tol:
                     break
@@ -112,6 +112,15 @@ class ServoController:
             print(f"Error moving servo {servo_id}: {e}")
 
     def get_servo_angle(self, servo_id, timeout=1):
+        """ 
+        Get servo angle
+
+        Args:
+            servo_id: servo id
+            timeout: Timeout value for servo read (default 1 second)
+                
+        Return: servo_id's angle (in degrees)
+        """
         try:
             actual_pos = servo_fns.getBusServoPulse(servo_id, self.serial_handle, timeout)
             if actual_pos is None:
@@ -125,11 +134,9 @@ class ServoController:
 def matlab_to_servo_angles(matlab_q):
     servo_q = [0] * 5
 
-    servo_q[0] = matlab_q[0] + 120
-    servo_q[1] = matlab_q[1] + 17.94
-    servo_q[2] = -matlab_q[2] + 467.94
-    servo_q[3] = matlab_q[3] + 120
-    servo_q[4] = matlab_q[4] + 120
+    for i in range(5):
+        # y = Ax + B
+        servo_q[i] = polarity_vec[i] * matlab_q[i] + offset_vec[i]
 
     return servo_q
 
@@ -137,17 +144,14 @@ if __name__ == "__main__":
     print("Sandbox code")
     servo = ServoController()
 
+    # Matlab Angles Example (Move to home position)
     #servo_position = matlab_to_servo_angles([0, 102.06, 257.94, 0, 0])
-    #print(servo_position)
-    #servo.move_robot(servo_position, 8000)
+    #servo.move_robot(servo_position, 8000, parallel=True)
 
-    #new_position = [x - 50 for x in stable_home_position]
-    #new_position = [120,220,210,210,120]
-    #print(new_position)
-    #servo.move_robot(new_position, 8000, parallel=True)
+    # Return Home Example
+    #servo.return_home(8000,parallel=True)
 
-    servo.return_home(8000,parallel=True)
-
+    # Get Angle Example
     #servo_3_angle = servo.get_servo_angle(3)
     #print(servo_3_angle)
     
