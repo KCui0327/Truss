@@ -47,7 +47,7 @@ class Perception:
         self.depth_model = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Base-hf", image_processor=processor)
         if self.depth_model is None:
             raise ValueError("The Depth Estimation Model was not initialized properly.")
-        self.segementation_model = Client("akhaliq/sam3")
+        self.segementation_model = Client("prithivMLmods/SAM3-Demo")
         if self.segementation_model is None:
             raise ValueError("The Segmentation Model was not initialized properly.")
     
@@ -134,18 +134,15 @@ class Perception:
             raise FileNotFoundError("Temporary image file was not created successfully.")
         
         result = self.segementation_model.predict(
-            image=handle_file("/tmp/curr_view.jpg"),
-            text="Strawberry Stem",
-            threshold=0.6,
-            mask_threshold=0.5,
-            api_name="/segment"
+            source_img=handle_file("/tmp/curr_view.jpg"),
+            text_query="strawberry stem",
+            conf_thresh=0.6,
+            api_name="/run_image_segmentation"
         )
 
         os.remove("/tmp/curr_view.jpg")
-
-        res = result[0]
         locs = []
-        for annot in res['annotations']:
+        for annot in result['annotations']:
             stem_img = cv2.imread(annot['image']) # masked as red
             b, g, r = cv2.split(stem_img) # split into color channels
 
