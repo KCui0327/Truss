@@ -22,7 +22,7 @@ ESP32_CAMERA_URL     = "http://192.168.2.39/capture"
 
 # resolves warnings about using a slower image processor
 processor = AutoImageProcessor.from_pretrained(
-    "depth-anything/Depth-Anything-V2-Base-hf",
+    "depth-anything/Depth-Anything-V2-Metric-Indoor-Large-hf",
     use_fast=True
 )
 
@@ -44,7 +44,7 @@ class Perception:
         if self.detection_model is None:
             raise ValueError("The Ripeness Detection Model was not initialized properly.")
         # Depth Anything V2 Model Initialization
-        self.depth_model = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Base-hf", image_processor=processor)
+        self.depth_model = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Metric-Indoor-Large-hf", image_processor=processor)
         if self.depth_model is None:
             raise ValueError("The Depth Estimation Model was not initialized properly.")
         self.segementation_model = Client("prithivMLmods/SAM3-Demo")
@@ -148,12 +148,11 @@ class Perception:
 
             mask = (r > 150) & (g < 80) & (b < 80) # get red mask
 
-            # bunch of coordinates where mask is true and just randomly pick one
+            # get the center of the masked stem region
             ys, xs = np.where(mask)
-            coords = list(zip(xs, ys))
-            rand_coord = random.choice(coords)
-            xs, ys = rand_coord
-            locs.append((xs, ys))
+            center_x = int(np.mean(xs))
+            center_y = int(np.mean(ys))
+            locs.append((center_x, center_y))
         
         return locs
         
@@ -168,9 +167,50 @@ class Perception:
         pil_img = Image.fromarray(img_rgb)
 
         output = self.depth_model(pil_img)
-        depth_map = np.array(output["depth"])
+        depth_map = np.array(output["predicted_depth"]) * DEPTH_SCALE_FACTOR
+
+        # save depth map as grayscale image for visualization
+        depth_vis = np.array(output["depth"])
+        cv2.imwrite("depth_map.jpg", depth_vis)
 
         return depth_map
+    
+    def get_depth_at_point(self, depth_map: np.ndarray, x: int, y: int) -> float:
+        if not isinstance(depth_map, np.ndarray):
+            raise TypeError("Incorrect depth map input type. Expected np.ndarray.")
+        if depth_map is None or depth_map.size == 0:
+            raise ValueError("Empty depth map provided for depth retrieval.")
+        if x < 0 or y < 0 or x >= depth_map.shape[1] or y >= depth_map.shape[0]:
+            raise ValueError("Coordinates are out of depth map bounds.")
+        
+        kernel_size = 5
+        x_min = max(0, x - kernel_size // 2)
+        x_max = min(depth_map.shape[1], x + kernel_size // 2 + 1)
+        y_min = max(0, y - kernel_size // 2)
+        y_max = min(depth_map.shape[0], y + kernel_size // 2 + 1)
+
+        depth_region = depth_map[y_min:y_max, x_min:x_max]
+        valid_depths = depth_region[depth_region > 0]
+        if valid_depths.size == 0:
+            raise ValueError("No valid depth values found in the specified region.")
+        
+        return np.median(valid_depths)
+    
+    def word_coords_transform(self) -> None:
+        # ESP 32 Camera Intrinsics
+        fx, fy = 574.63852299, 574.02980747  # Focal length in pixels along x-axis and y-axis
+        cx_intrinsic, cy_intrinsic = 290.49412584, 276.20316581  # Principal point x-coordinate and y-coordinate in pixels
+
+        t_x, t_y, t_depth = TARGET_STRAWBERRY.x, TARGET_STRAWBERRY.y, TARGET_STRAWBERRY.depth
+        t_depth *= 1000  # convert m to mm
+
+        x = (t_x - cx_intrinsic) * t_depth / fx
+        y = (t_y - cy_intrinsic) * t_depth / fy
+        z = t_depth
+
+        TARGET_STRAWBERRY.x = x
+        TARGET_STRAWBERRY.y = y
+        TARGET_STRAWBERRY.depth = z
     
     # Determines new target strawberries' coordinate based on new frame
     # algorithm: min. 3D Euclidean Distance
@@ -194,8 +234,8 @@ class Perception:
 if __name__ == "__main__":
     perception = Perception()
     while True:
-        img = perception.fetch_image(ESP32_CAMERA_URL)
-        
+        # img = perception.fetch_image(ESP32_CAMERA_URL)
+        img = cv2.imread("1.jpg", cv2.IMREAD_COLOR)        
         if img is not None:
             detections = perception.detect_strawberry(img)
             if detections:
@@ -206,12 +246,14 @@ if __name__ == "__main__":
                 stem_coords = perception.get_target_stem_coordinate(img, t_cx, t_cy)
                 t_x, t_y = stem_coords
                 depth_map = perception.get_depth_estimation(img)
-                t_depth = depth_map[t_y, t_x]
+                t_depth = perception.get_depth_at_point(depth_map, t_x, t_y)
                 TARGET_STRAWBERRY = TargetStrawberry(
                     x=t_x,
                     y=t_y,
                     depth=t_depth,
                 )
+
+                perception.word_coords_transform()
 
                 print(f"Target Strawberry Coordinates (x, y, depth): ({TARGET_STRAWBERRY.x}, {TARGET_STRAWBERRY.y}, {TARGET_STRAWBERRY.depth})")
             
