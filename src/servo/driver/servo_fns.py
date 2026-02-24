@@ -5,7 +5,7 @@ We have modified the code to suit USB connections and adapted it for our specifi
 This code is intended for controlling servos via a USB interface.
 """
 
-from driver.servo_driver import *
+from .servo_driver import *
 import time
 
 def setBusServoID(oldid, newid, serialHandle=None):

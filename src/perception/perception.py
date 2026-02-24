@@ -12,15 +12,14 @@ from ultralytics import YOLO
 from transformers import pipeline, AutoImageProcessor
 from gradio_client import Client, handle_file
 from PIL import Image
-import logging
-from logutils import init
+from logutils import init, get_logger
 
 """
 Global Variables
 """
 
 init()
-logger = logging.getLogger("loki")
+logger = get_logger("Perception")
 
 DETECTION_MODEL_PATH = "perception/models/object_detection/weights.pt"
 ESP32_CAMERA_URL     = "http://192.168.2.39/capture"
@@ -47,18 +46,30 @@ class Perception:
         logger.info("Initializing perception module models")
         # YOLO Model Initialization
         logger.debug("Loading detection model from path: %s", DETECTION_MODEL_PATH)
-        self.detection_model = YOLO(DETECTION_MODEL_PATH)
+        try:
+            self.detection_model = YOLO(DETECTION_MODEL_PATH)
+        except Exception:
+            logger.exception("Exception while initializing detection model from %s", DETECTION_MODEL_PATH)
+            raise
         if self.detection_model is None:
             logger.error("Failed to initialize ripeness detection model")
             raise ValueError("The Ripeness Detection Model was not initialized properly.")
         # Depth Anything V2 Model Initialization
         logger.debug("Loading depth estimation model")
-        self.depth_model = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Metric-Indoor-Large-hf", image_processor=processor)
+        try:
+            self.depth_model = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Metric-Indoor-Large-hf", image_processor=processor)
+        except Exception:
+            logger.exception("Exception while initializing depth estimation model")
+            raise
         if self.depth_model is None:
             logger.error("Failed to initialize depth estimation model")
             raise ValueError("The Depth Estimation Model was not initialized properly.")
         logger.debug("Connecting to segmentation model client")
-        self.segementation_model = Client("prithivMLmods/SAM3-Demo")
+        try:
+            self.segementation_model = Client("prithivMLmods/SAM3-Demo")
+        except Exception:
+            logger.exception("Exception while initializing segmentation model client")
+            raise
         if self.segementation_model is None:
             logger.error("Failed to initialize segmentation model")
             raise ValueError("The Segmentation Model was not initialized properly.")
@@ -94,15 +105,22 @@ class Perception:
             logger.warning("Empty image provided for detection")
             raise ValueError("Empty image provided for detection.")
         logger.debug("Running strawberry detection on image with shape %s", img.shape)
-        
+
         def save_image(img: np.ndarray) -> str:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"detections/image_{timestamp}.jpg"
-            cv2.imwrite(filename, img)
-            logger.info("Saved detection visualization to %s", filename)
+            try:
+                cv2.imwrite(filename, img)
+                logger.info("Saved detection visualization to %s", filename)
+            except Exception:
+                logger.exception("Failed to save detection visualization to %s", filename)
             return filename
-        
-        detections = self.detection_model(img)
+
+        try:
+            detections = self.detection_model(img)
+        except Exception:
+            logger.exception("Exception during detection model inference")
+            return []
         ret = []
         for r in detections:
             for box in r.boxes:
@@ -116,7 +134,10 @@ class Perception:
                 logger.debug("Detection: label=%s conf=%.2f bbox=%s center=(%s,%s)", label, conf, xyxy.tolist(), cx, cy)
                 
             if r.boxes.cls.numel() > 0: # only save image if there is a strawberry detected
-                save_image(detections[0].plot()) 
+                try:
+                    save_image(detections[0].plot())
+                except Exception:
+                    logger.exception("Failed to save plotted detection image")
             logger.info("Detected %d objects in current frame", len(ret))
                 
         return ret
@@ -163,23 +184,36 @@ class Perception:
             logger.warning("Empty image provided for segmentation")
             raise ValueError("Empty image provided for segmentation.")
         logger.debug("Running segmentation for stem extraction")
-        
-        cv2.imwrite("/tmp/curr_view.jpg", img)
-        if not os.path.exists("/tmp/curr_view.jpg"):
-            logger.error("Failed to create temporary image file for segmentation")
-            raise FileNotFoundError("Temporary image file was not created successfully.")
-        
-        result = self.segementation_model.predict(
-            source_img=handle_file("/tmp/curr_view.jpg"),
-            text_query="strawberry stem",
-            conf_thresh=0.6,
-            api_name="/run_image_segmentation"
-        )
 
-        os.remove("/tmp/curr_view.jpg")
-        logger.debug("Segmentation prediction completed")
+        try:
+            cv2.imwrite("/tmp/curr_view.jpg", img)
+            if not os.path.exists("/tmp/curr_view.jpg"):
+                logger.error("Failed to create temporary image file for segmentation")
+                raise FileNotFoundError("Temporary image file was not created successfully.")
+
+            result = self.segementation_model.predict(
+                source_img=handle_file("/tmp/curr_view.jpg"),
+                text_query="strawberry stem",
+                conf_thresh=0.6,
+                api_name="/run_image_segmentation"
+            )
+            logger.debug("Segmentation prediction completed")
+        except Exception:
+            logger.exception("Exception while running segmentation model")
+            # cleanup if file exists
+            try:
+                if os.path.exists("/tmp/curr_view.jpg"):
+                    os.remove("/tmp/curr_view.jpg")
+            except Exception:
+                logger.exception("Failed to remove temporary segmentation file")
+            return []
+
+        try:
+            os.remove("/tmp/curr_view.jpg")
+        except Exception:
+            logger.exception("Failed to remove temporary segmentation file after prediction")
         locs = []
-        for annot in result['annotations']:
+        for annot in result.get('annotations', []):
             stem_img = cv2.imread(annot['image']) # masked as red
             b, g, r = cv2.split(stem_img) # split into color channels
 
@@ -210,13 +244,24 @@ class Perception:
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) 
         pil_img = Image.fromarray(img_rgb)
 
-        output = self.depth_model(pil_img)
-        depth_map = np.array(output["predicted_depth"])
+        try:
+            output = self.depth_model(pil_img)
+        except Exception:
+            logger.exception("Exception during depth estimation inference")
+            return np.array([])
+
+        depth_map = np.array(output.get("predicted_depth", []))
 
         # save depth map as grayscale image for visualization
-        depth_vis = np.array(output["depth"])
-        cv2.imwrite("depth_map.jpg", depth_vis)
-        logger.info("Depth map generated and saved to depth_map.jpg")
+        depth_vis = np.array(output.get("depth", []))
+        try:
+            if depth_vis.size:
+                cv2.imwrite("depth_map.jpg", depth_vis)
+                logger.info("Depth map generated and saved to depth_map.jpg")
+            else:
+                logger.debug("Depth model returned empty visualization array")
+        except Exception:
+            logger.exception("Failed to save depth visualization image")
 
         return depth_map
     
@@ -291,36 +336,41 @@ if __name__ == "__main__":
     perception = Perception()
     logger.info("Starting perception main loop")
     while True:
-        # img = perception.fetch_image(ESP32_CAMERA_URL)
-        img = cv2.imread("perception/1.jpg", cv2.IMREAD_COLOR)        
-        if img is not None:
-            detections = perception.detect_strawberry(img)
-            if detections:
-                # pick a random ripe strawberry as target
-                target_xy = random.choice(detections)
-                t_cx, t_cy, _, _, _ = target_xy
-
-                stem_coords = perception.get_target_stem_coordinate(img, t_cx, t_cy)
-                t_x, t_y = stem_coords
-                depth_map = perception.get_depth_estimation(img)
-                t_depth = perception.get_depth_at_point(depth_map, t_x, t_y)
-                TARGET_STRAWBERRY = TargetStrawberry(
-                    x=t_x,
-                    y=t_y,
-                    depth=t_depth,
-                )
-
-                perception.word_coords_transform()
-
-                logger.info(
-                    "Target Strawberry Coordinates (x, y, depth): (%.4f, %.4f, %.4f)",
-                    TARGET_STRAWBERRY.x,
-                    TARGET_STRAWBERRY.y,
-                    TARGET_STRAWBERRY.depth,
-                )
+        try:
+            img = perception.fetch_image(ESP32_CAMERA_URL)
+            if img is None:
+                logger.warning("Input image could not be read")
             else:
-                logger.info("No detections found in current frame")
-        else:
-            logger.warning("Input image could not be read")
-            
+                detections = perception.detect_strawberry(img)
+                if detections:
+                    # pick a random ripe strawberry as target
+                    target_xy = random.choice(detections)
+                    t_cx, t_cy, _, _, _ = target_xy
+
+                    stem_coords = perception.get_target_stem_coordinate(img, t_cx, t_cy)
+                    t_x, t_y = stem_coords
+                    depth_map = perception.get_depth_estimation(img)
+                    if depth_map.size == 0:
+                        logger.warning("Empty depth map returned; skipping depth query")
+                    else:
+                        t_depth = perception.get_depth_at_point(depth_map, t_x, t_y)
+                        TARGET_STRAWBERRY = TargetStrawberry(
+                            x=t_x,
+                            y=t_y,
+                            depth=t_depth,
+                        )
+
+                        perception.word_coords_transform()
+
+                        logger.info(
+                            "Target Strawberry Coordinates (x, y, depth): (%.4f, %.4f, %.4f)",
+                            TARGET_STRAWBERRY.x,
+                            TARGET_STRAWBERRY.y,
+                            TARGET_STRAWBERRY.depth,
+                        )
+                else:
+                    logger.info("No detections found in current frame")
+        except Exception:
+            logger.exception("Unhandled exception in perception main loop iteration")
+
         time.sleep(10) # 10 seconds

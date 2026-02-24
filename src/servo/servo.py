@@ -1,7 +1,12 @@
 import serial
 import time
-import driver.servo_fns as servo_fns
+from .driver import servo_fns
+from logutils import init, get_logger
 
+init()
+logger = get_logger("ServoController")
+
+BAUD_RATE = 115200
 home_position = [120,120,210,120,120] #Mapped to matlab angles
 stable_home_position = [120,120,180,210,120] # Better home configuration practically
 
@@ -13,8 +18,11 @@ EXPONENTIAL_BACKOFF_BASE = [2, 4, 6]  # in seconds
 class ServoController:
     def __init__(self):
         try:
-            self.serial_handle = serial.Serial("/dev/ttyUSB0", 115200)
+            logger.info("Initializing ServoController with baud rate %d", BAUD_RATE)
+            self.serial_handle = serial.Serial("/dev/ttyUSB0", baudrate=BAUD_RATE)
+            logger.info("Opened serial connection on /dev/ttyUSB0 at %d", BAUD_RATE)
         except serial.SerialException as e:
+            logger.exception("Error initializing serial port")
             raise Exception(f"Error initializing serial port: {e}")
     
     def angle_to_pos(self, angle):
@@ -37,15 +45,17 @@ class ServoController:
         Return: None
         """
         if duration < 500 or duration > 30000:
+            logger.error("Invalid duration for return_home: %s", duration)
             raise ValueError(f"Invalid duration: {duration}\nValid between 500-30000")
         if not parallel:
             for i, angle in enumerate(stable_home_position):
-                print(f"Moving servo {i+1}")
+                logger.info("Moving servo %d to home angle %s", i+1, angle)
                 self.move_servo_motor(i+1, angle, duration)
         else:
             for i, angle in enumerate(stable_home_position):
                 servo_fns.setBusServoPulse(i+1, self.angle_to_pos(angle), duration, self.serial_handle)
             time.sleep(duration / 1000)  # Wait for the movement to complete
+            logger.debug("Parallel return_home movement completed in %d ms", duration)
     
     def move_robot(self, angle_list, duration, parallel=False):
         """ 
@@ -59,16 +69,18 @@ class ServoController:
         Return: None
         """
         if duration < 500 or duration > 30000:
+            logger.error("Invalid duration for move_robot: %s", duration)
             raise ValueError(f"Invalid duration: {duration}\nValid between 500-30000")
         
         if not parallel:
             for i, angle in enumerate(angle_list):
-                print(f"Moving servo {i+1}")
+                logger.info("Moving servo %d to angle %s", i+1, angle)
                 self.move_servo_motor(i+1, angle, duration)
         else:
             for i, angle in enumerate(angle_list):
                 servo_fns.setBusServoPulse(i+1, self.angle_to_pos(angle), duration, self.serial_handle)
             time.sleep(duration / 1000)  # Wait for the movement to complete
+            logger.debug("Parallel move_robot completed in %d ms", duration)
 
     def move_servo_motor(self, servo_id, angle, duration, tol=10):
         """ 
@@ -85,31 +97,39 @@ class ServoController:
         """
         try:
             if not 0 <= angle <= 240:
+                logger.error("Invalid angle provided to move_servo_motor: %s", angle)
                 raise ValueError(f"Invalid angle: {angle}")
             if duration < 500 or duration > 30000:
+                logger.error("Invalid duration provided to move_servo_motor: %s", duration)
                 raise ValueError(f"Invalid duration: {duration}\nValid between 500-30000")  
 
             target_pos = self.angle_to_pos(angle)
+            logger.debug("Setting servo %s target pos %s (angle %s) with duration %s", servo_id, target_pos, angle, duration)
             servo_fns.setBusServoPulse(servo_id, target_pos, duration, self.serial_handle)
             time.sleep(duration / 1000)  # Wait for the movement to complete
 
             curr_backoff_index = 0
             while True:
                 actual_pos = servo_fns.getBusServoPulse(servo_id, self.serial_handle, timeout=1)
+                logger.debug("Read servo %s actual pos: %s", servo_id, actual_pos)
                 if actual_pos is None:
+                    logger.error("Servo read timeout for servo %s", servo_id)
                     raise TimeoutError(f"Timeout Error: Servo Read Timeout after 1 second")
 
                 if abs(actual_pos - target_pos) <= tol:
+                    logger.info("Servo %s reached target position (pos=%s, tol=%s)", servo_id, actual_pos, tol)
                     break
-                servo_fns.setBusServoPulse(servo_id, target_pos, EXPONENTIAL_BACKOFF_BASE[curr_backoff_index] * 1000, self.serial_handle)
-                time.sleep(EXPONENTIAL_BACKOFF_BASE[curr_backoff_index])  # Sleep for the first backoff duration
+                backoff = EXPONENTIAL_BACKOFF_BASE[curr_backoff_index]
+                logger.warning("Servo %s did not reach target yet. Retrying with backoff %s seconds (index %s)", servo_id, backoff, curr_backoff_index)
+                servo_fns.setBusServoPulse(servo_id, target_pos, backoff * 1000, self.serial_handle)
+                time.sleep(backoff)  # Sleep for the backoff duration
                 if curr_backoff_index < len(EXPONENTIAL_BACKOFF_BASE) - 1:
                     curr_backoff_index += 1
                 else:
-                    print(f"Warning: Servo {servo_id} did not reach the target angle {angle}. Actual angle: {self.pos_to_angle(actual_pos)}")
+                    logger.error("Servo %s did not reach the target angle %s after backoffs. Actual angle: %s", servo_id, angle, self.pos_to_angle(actual_pos))
                     break
         except Exception as e:
-            print(f"Error moving servo {servo_id}: {e}")
+            logger.exception("Error moving servo %s: %s", servo_id, e)
 
     def get_servo_angle(self, servo_id, timeout=1):
         """ 
@@ -123,10 +143,12 @@ class ServoController:
         """
         try:
             actual_pos = servo_fns.getBusServoPulse(servo_id, self.serial_handle, timeout)
+            logger.debug("Read servo %s actual pos: %s", servo_id, actual_pos)
             if actual_pos is None:
+                logger.error("Servo read timeout for servo %s", servo_id)
                 raise TimeoutError(f"Timeout Error: Servo Read Timeout after 1 second")
         except Exception as e:
-            print(f"Error reading servo {servo_id}: {e}")
+            logger.exception("Error reading servo %s: %s", servo_id, e)
             return None
         return self.pos_to_angle(actual_pos)
 
@@ -140,8 +162,9 @@ def matlab_to_servo_angles(matlab_q):
 
     return servo_q
 
+
 if __name__ == "__main__":
-    print("Sandbox code")
+    logger.info("Running servo sandbox code")
     servo = ServoController()
 
     # Matlab Angles Example (Move to home position)
@@ -153,5 +176,5 @@ if __name__ == "__main__":
 
     # Get Angle Example
     #servo_3_angle = servo.get_servo_angle(3)
-    #print(servo_3_angle)
+    #logger.info("Servo 3 angle: %s", servo_3_angle)
     
