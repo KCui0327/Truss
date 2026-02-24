@@ -1,4 +1,6 @@
 import logging
+import logging.config
+import logging_loki
 import yaml
 from pathlib import Path
 
@@ -20,7 +22,15 @@ def init():
 
 def get_logger(name: str):
     """
-    Get a logger with the specified name.
+    Get loki logger for module. Used for observability in Grafana Loki.
     """
+    loki_logger = logging.getLogger(name)
+    loki_handler = logging_loki.LokiHandler(
+        url="http://localhost:3100/loki/api/v1/push",
+        version="1",
+        tags={"service_name": name},
+    )
+    loki_logger.setLevel(logging.DEBUG)
+    loki_logger.addHandler(loki_handler)
 
-    return logging.getLogger(name)
+    return loki_logger

@@ -1,7 +1,11 @@
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
+from logutils import init, get_logger
 
 from transitions import Machine
+
+init()
+logger = get_logger("FSM")
 
 @dataclass
 class FaultInfo:
@@ -33,6 +37,8 @@ class FSM:
     def __init__(self) -> None:
         self.fault: Optional[FaultInfo] = None
 
+        logger.info("Initializing FSM with initial state 'IDLE'")
+
         self.machine = Machine(
             model=self,
             states=FSM.states,
@@ -59,9 +65,14 @@ class FSM:
         self.machine.add_transition("halt", "*", "HALTED", before="on_halt")
         self.machine.add_transition("faulted", "*", "FAULT", before="on_faulted")
 
+        logger.debug("FSM transitions and states configured: %s", FSM.states)
+
     def on_halt(self) -> None:
         # Placeholders for telemetry hooks (log reason elsewhere)
+        logger.warning("FSM entering HALTED state")
         return
 
     def on_faulted(self, code: str = "unknown", detail: str = "") -> None:
         self.fault = FaultInfo(code=code, detail=detail)
+        logger.error("FSM faulted: code=%s detail=%s", code, detail)
+        return
