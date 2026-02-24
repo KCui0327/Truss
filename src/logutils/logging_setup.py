@@ -1,4 +1,6 @@
 import logging
+import logging.config
+import logging_loki
 import yaml
 from pathlib import Path
 
@@ -18,6 +20,16 @@ def init():
     
     logging.config.dictConfig(config)
 
+    loki_logger = logging.getLogger("loki")
+    handler = logging_loki.LokiHandler(
+        url="http://localhost:3100/loki/api/v1/push",
+        version="2",
+        tags={"service_name": "Perception"},
+    )
+    loki_logger.setLevel(logging.DEBUG)
+    loki_logger.addHandler(handler)
+
+    
 def get_logger(name: str):
     """
     Get a logger with the specified name.
