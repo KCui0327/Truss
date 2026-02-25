@@ -75,6 +75,49 @@ class Perception:
             raise ValueError("The Segmentation Model was not initialized properly.")
         logger.info("Perception models initialized successfully")
     
+    # an iteration of the perception module
+    def run(self):
+        logger.info("Running perception module")
+        TARGET_STRAWBERRY = None
+        try:
+            img = perception.fetch_image(ESP32_CAMERA_URL)
+            if img is None:
+                logger.warning("Input image could not be read")
+            else:
+                detections = perception.detect_strawberry(img)
+                if detections:
+                    # pick a random ripe strawberry as target
+                    target_xy = random.choice(detections)
+                    t_cx, t_cy, _, _, _ = target_xy
+
+                    stem_coords = perception.get_target_stem_coordinate(img, t_cx, t_cy)
+                    t_x, t_y = stem_coords
+                    depth_map = perception.get_depth_estimation(img)
+                    if depth_map.size == 0:
+                        logger.warning("Empty depth map returned; skipping depth query")
+                    else:
+                        t_depth = perception.get_depth_at_point(depth_map, t_x, t_y)
+                        TARGET_STRAWBERRY = TargetStrawberry(
+                            x=t_x,
+                            y=t_y,
+                            depth=t_depth,
+                        )
+
+                        perception.world_coords_transform()
+
+                        logger.info(
+                            "Target Strawberry Coordinates (x, y, depth): (%.4f, %.4f, %.4f)",
+                            TARGET_STRAWBERRY.x,
+                            TARGET_STRAWBERRY.y,
+                            TARGET_STRAWBERRY.depth,
+                        )
+                else:
+                    logger.info("No detections found in current frame")
+        except Exception:
+            logger.exception("Unhandled exception in perception main loop iteration")
+
+        return TARGET_STRAWBERRY
+
     # Fetch a single JPEG from an ESP32 Camera
     def fetch_image(self, url: str) -> np.ndarray:
         logger.debug("Fetching image from URL: %s", url)
@@ -292,7 +335,7 @@ class Perception:
         logger.debug("Depth at point (%s, %s): %.4f", x, y, depth_value)
         return depth_value
     
-    def word_coords_transform(self) -> None:
+    def world_coords_transform(self) -> None:
         # ESP 32 Camera Intrinsics
         fx, fy = 574.63852299, 574.02980747  # Focal length in pixels along x-axis and y-axis
         cx_intrinsic, cy_intrinsic = 290.49412584, 276.20316581  # Principal point x-coordinate and y-coordinate in pixels
